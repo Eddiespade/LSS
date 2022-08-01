@@ -299,7 +299,7 @@ def viz_model_preds(version,
                                           grid_conf=grid_conf, bsz=bsz, nworkers=nworkers,
                                           parser_name='segmentationdata')
     loader = trainloader if viz_train else valloader
-    nusc_maps = get_nusc_maps(map_folder)
+    nusc_maps = get_nusc_maps(map_folder)   # 获取地图数据
 
     device = torch.device('cpu') if gpuid < 0 else torch.device(f'cuda:{gpuid}')
 
@@ -311,15 +311,27 @@ def viz_model_preds(version,
     dx, bx, _ = gen_dx_bx(grid_conf['xbound'], grid_conf['ybound'], grid_conf['zbound'])
     dx, bx = dx[:2].numpy(), bx[:2].numpy()
 
+    # 储存场景对应的地图数据
     scene2map = {}
     for rec in loader.dataset.nusc.scene:
         log = loader.dataset.nusc.get('log', rec['log_token'])
         scene2map[rec['name']] = log['location']
 
-
     val = 0.01
     fH, fW = final_dim
+    # ------------------------ 绘图用 --------------------------------
+    # ----------------------------------------------------------------
+    # figure(num=None, figsize=None, dpi=None, facecolor=None, edgecolor=None, frameon=True)
+    # 参数说明：
+    #   num:图像编号或名称，数字为编号 ，字符串为名称
+    #   figsize:指定figure的宽和高，单位为英寸；
+    #   dpi参数指定绘图对象的分辨率，即每英寸多少个像素，缺省值为80 1英寸等于2.5cm,A4纸是 21*30cm的纸张
+    #   facecolor:背景颜色
+    #   edgecolor:边框颜色
+    #   frameon:是否显示边框
+    # ----------------------------------------------------------------
     fig = plt.figure(figsize=(3*fW*val, (1.5*fW + 2*fH)*val))
+    # .gridspec.GridSpec(3,3)：分为3行3列；height_ratios：表示行的宽度比率。
     gs = mpl.gridspec.GridSpec(3, 3, height_ratios=(1.5*fW, fH, fH))
     gs.update(wspace=0.0, hspace=0.0, left=0.0, right=1.0, top=1.0, bottom=0.0)
 
@@ -336,12 +348,17 @@ def viz_model_preds(version,
                     )
             out = out.sigmoid().cpu()
 
+            # 绘制每个输入与输出
             for si in range(imgs.shape[0]):
+                # plt.clf()：清除当前 figure 的所有axes，但是不关闭这个 window，所以能继续复用于其他的 plot。
                 plt.clf()
+                # 绘制6个输入图像
                 for imgi, img in enumerate(imgs[si]):
+                    # 该图缩放的位置
                     ax = plt.subplot(gs[1 + imgi // 3, imgi % 3])
+                    # 逆标准化，同时tensor转换为  PILImage格式
                     showimg = denormalize_img(img)
-                    # flip the bottom images
+                    # 左右翻转 后面摄像头的图像 ？？？？？？？？？？？？？？？？
                     if imgi > 2:
                         showimg = showimg.transpose(Image.FLIP_LEFT_RIGHT)
                     plt.imshow(showimg)
@@ -358,13 +375,14 @@ def viz_model_preds(version,
                     mpatches.Patch(color=(1.00, 0.50, 0.31, 0.8), label='Map (for visualization purposes only)')
                 ], loc=(0.01, 0.86))
                 plt.imshow(out[si].squeeze(0), vmin=0, vmax=1, cmap='Blues')
+                plt.savefig("model_out/eval{:0>6d}_{:0>3d}.jpg".format(batchi, si), dpi=600)
 
-                # plot static map (improves visualization)
+                # 绘制静态地图（提高可视化）
                 rec = loader.dataset.ixes[counter]
                 plot_nusc_map(rec, nusc_maps, loader.dataset.nusc, scene2map, dx, bx)
                 plt.xlim((out.shape[3], 0))
                 plt.ylim((0, out.shape[3]))
-                add_ego(bx, dx)
+                add_ego(bx, dx)                     # 在图像中添加小车的位置
 
                 imname = f'eval{batchi:06}_{si:03}.jpg'
                 print('saving in ', save_dir, imname, sep="")

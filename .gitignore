@@ -135,3 +135,8 @@ goodmodel.pt.bak
 storage/
 imagenet_pretrained/
 *.csv
+
+data/
+lidar_vis/
+model_out/
+output/
